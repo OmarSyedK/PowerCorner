@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'shadow_boxing_screen.dart';
 import '../workouts/stance_movement_workout_sheet.dart';
+import '../workouts/basic_punches.dart';
+import '../workouts/2punch_combinations.dart';
+import '../workouts/3punch_combinations.dart';
 
 class TrainScreen extends StatefulWidget {
   const TrainScreen({super.key});
@@ -14,16 +17,16 @@ class _TrainScreenState extends State<TrainScreen> {
   String _activeFilter = 'all';
 
   final _workouts = [
+    _WorkoutData('🤺', 'Stance + Movements', 'Footwork Fundamentals', 'Beginner', '12 min', 'beginner', true),
+    _WorkoutData('👊', 'Basic Punches', 'Jab • Cross • Hooks', 'Beginner', '15 min', 'beginner', true),
+    _WorkoutData('2️⃣', '2 Punch Combinations', 'Pad Drills • 2-Count', 'Beginner', '14 min', 'beginner', true),
+    _WorkoutData('3️⃣', '3 Punch Combinations', 'Bag Work • 3-Count', 'Beginner', '18 min', 'beginner', true),
     _WorkoutData('🥊', 'Southpaw Shredder', 'Shadow Boxing • 4 Rounds', 'Beginner', '20 min', 'shadow', true),
     _WorkoutData('💪', "Puncher's Power", 'Strength • Upper Body', 'Advanced', '45 min', 'strength', false),
     _WorkoutData('🏃', 'Road Work Sprint', 'Cardio • Outdoor', 'Intermediate', '35 min', 'cardio', false),
     _WorkoutData('⚡', 'Rapid Fire Combos', 'Combo Drills • 3 Rounds', 'Intermediate', '15 min', 'combo', true),
     _WorkoutData('🏋️', 'Core Destroyer', 'Strength • Core & Legs', 'Advanced', '50 min', 'strength', false),
     _WorkoutData('🎯', 'Precision Drills', 'Shadow Boxing • Focus Mitts', 'Advanced', '40 min', 'shadow', true),
-    _WorkoutData('🧍', 'Stance + Movements', 'Footwork Fundamentals', 'Beginner', '12 min', 'beginner', true),
-    _WorkoutData('👊', 'Basic Punches', 'Jab • Cross • Hooks', 'Beginner', '15 min', 'beginner', true),
-    _WorkoutData('🥋', '2 Punch Combinations', 'Pad Drills • 2-Count', 'Beginner', '14 min', 'beginner', true),
-    _WorkoutData('🔥', '3 Punch Combinations', 'Bag Work • 3-Count', 'Beginner', '18 min', 'beginner', true),
   ];
 
   void _openShadowBoxing() {
@@ -46,6 +49,44 @@ class _TrainScreenState extends State<TrainScreen> {
       ),
     );
   }
+
+   void _openBasicPunches() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.96,
+        child: const BasicPunchesWorkoutSheet(),
+      ),
+    );
+  }
+
+  void _open2PunchCombinations() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.96,
+          child: const TwoPunchCombinationsWorkoutSheet(),
+      ),
+    );
+  }
+
+  void _open3PunchCombinations() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.96,
+        child: const ThreePunchCombinationsWorkoutSheet(),
+      ),
+    );
+  }
+
+
 
   void _showToast(String msg) {
     final overlay = Overlay.of(context);
@@ -142,6 +183,12 @@ class _TrainScreenState extends State<TrainScreen> {
                         data: w,
                         onTap: w.title == 'Stance + Movements'
                             ? _openStanceAndMovements
+                            : w.title == 'Basic Punches'
+                                ? _openBasicPunches
+                            : w.title == '2 Punch Combinations'
+                                ? _open2PunchCombinations
+                            : w.title == '3 Punch Combinations'
+                                ? _open3PunchCombinations
                             : (w.usesSb
                                 ? _openShadowBoxing
                                 : () => _showToast('Starting ${w.title}...')),

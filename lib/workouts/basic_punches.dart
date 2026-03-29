@@ -2,177 +2,239 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:video_player/video_player.dart';
 import '../theme/app_theme.dart';
+import 'workout_foreground_service.dart';
 
-class StanceMovementWorkoutSheet extends StatefulWidget {
-  const StanceMovementWorkoutSheet({super.key});
+class BasicPunchesWorkoutSheet extends StatefulWidget {
+  const BasicPunchesWorkoutSheet({super.key});
+
   @override
-  State<StanceMovementWorkoutSheet> createState() => _StanceMovementWorkoutSheetState();
+  State<BasicPunchesWorkoutSheet> createState() =>
+      _BasicPunchesWorkoutSheetState();
 }
-class _StanceMovementWorkoutSheetState extends State<StanceMovementWorkoutSheet> {
+
+class _BasicPunchesWorkoutSheetState
+    extends State<BasicPunchesWorkoutSheet> with WidgetsBindingObserver {
   static const int _totalRounds = 3;
-  static const int _roundDuration = 60;
-  static const int _restDuration = 15;
+  static const int _roundDuration = 120;
+  static const int _restDuration = 20;
+
   int _tutorialIndex = 0;
   bool _showTutorial = true;
+
   int currentRound = 1;
   int timeLeft = _roundDuration;
   String phase = 'fight';
   bool running = false;
+  DateTime? _phaseEndAt;
+
   Timer? _timer;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final Random _random = Random();
+
+  String _currentPunch = 'Get Ready';
+
+  /// Weighted punches (Jab appears more often)
+  final List<int> _weightedPunches = [
+    1, 1, 1, 1, // Jab (high probability)
+    2, 2,       // Cross
+    3,          // Left Hook
+    4,           // Right Hook
+    5,          // Left Uppercut
+    6           // Right Uppercut
+  ];
+
   final List<_TutorialStep> _steps = const [
     _TutorialStep(
-      title: 'Basic Boxing Stance',
-      body:'''
-This stance is the most basic and easy stance for learning. It provides a good balance between offence and defence.
-As you advance you can learn and perform more advanced stances and movements according to your preference.
+      title: 'Jab \nThe Most Important Punch',
+      body: '''
+1. While keeping the rest of your body still, extend your lead hand straight. (Lead hand is the hand that is forward)
+2. Start the movement from your shoulder. 
+3. Snap it back quickly.
+4. Keep your other hand up.
 
-1. Stand with one foot slightly ahead of the other, shoulder-width apart. 
-2. Keep your knees soft.
-3. Tuck your chin.
-4. Keep your hands up by your face.
-5. Stay balanced on the balls of your feet.
-          ''',
-      imagePath: 'assets/stance.jpg',
+The jab is the most basic and important punch at the same time. A great jab sets up everything else.
+A jab is used to attack, defend, score points, measure distance to your opponents and set up other punches.
+It is highly suggested that every combination should start with a jab.
+      ''',
+      videoPath: 'assets/video/jab.mp4',
     ),
     _TutorialStep(
-      title: 'Linear Movement',
+      title: 'Cross',
       body: '''
-1. Going forward: move lead foot first, then back foot.  
-2. Going backward: move back foot first, then lead foot.
-3. To move back quicker, shift more of your body weight onto your back foot.
-          ''',
+The second straight punch. The Cross is a very powerful punch as it comes from your dominant hand. 
+
+1. Rotate your hips and shoulder forward.
+2. Pivot your back foot.
+3. Keep your non-throwing hand up.
+4. Start the motion from your shoulder and throw your lead hand forward.
+      ''',
+      videoPath: 'assets/video/cross.mp4',
     ),
     _TutorialStep(
-      title: 'Lateral Movement',
+      title: 'Hook',
       body: '''
-1. If you want to move right, move your right foot first. 
-2. If you want to move left, move your left foot first. 
-3. Keep your stance shape and avoid crossing your feet.
-          ''',
+A strong Hook can be devastating. It can be thrown comfortably using both of your hands.
+
+1. Pivot your feet towards the punch.
+2. Bend your arm at 90°.
+3. Rotate hips and shoulders.
+4. Keep non-throwing hand up.
+      ''',
+      videoPath: 'assets/video/hook.mp4',
+    ),
+    _TutorialStep(
+      title: 'Uppercut',
+      body: '''
+The Uppercut is a sneaky punch as it is thrown from an unusual angle. 
+It is really good for surprising an opponent however it is ideally to be thrown in close range. It is a devastating punch to throw in the middle or at the end of a combination. 
+
+1. Drop slightly and drive upward.
+2. Pivot your legs and hips.
+3. Keep your non-thwoing hand up.
+      ''',
+      imagePath: 'assets/uppercut.jpg',
+    ),
+    _TutorialStep(
+      title: 'Punch Numbers',
+      body: '''
+1 = Jab  
+2 = Cross  
+3 = Lead Hook  
+4 = Rear Hook
+5 = Lead Uppercut
+6 = Rear Uppercut 
+
+Listen for the number and throw the punch.
+Remember: Odd numbers are for punches with lead hand, even numbers are for punches with rear hand.
+Exhale sharply from your nose during each punch
+      ''',
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WorkoutForegroundService.ensureInitialized();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    WorkoutForegroundService.stop();
     _audioPlayer.dispose();
     super.dispose();
   }
 
-  Future<void> _playAssetOncePerCall(String assetRelativePath) async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && running) {
+      _syncWithClock();
+    }
+  }
+
+  void _updateForegroundNotification() {
+    if (!running) return;
+    WorkoutForegroundService.startOrUpdate(
+      title: 'Basic Punches',
+      text: 'Round $currentRound/$_totalRounds • ${phase.toUpperCase()} • $_timeDisplay',
+    );
+  }
+
+  Future<void> _playAudio(String path) async {
     try {
       await _audioPlayer.stop();
-      await _audioPlayer.play(AssetSource(assetRelativePath));
-    } catch (_) {
-      // If an audio file is missing or fails to load, we simply skip it.
-    }
+      await _audioPlayer.play(AssetSource(path));
+    } catch (_) {}
   }
 
-  void _maybePlayInstructionAudio(int elapsed) {
+  int _getRandomPunch() {
+    return _weightedPunches[_random.nextInt(_weightedPunches.length)];
+  }
+
+  void _maybeCallPunch(int elapsed) {
     if (phase != 'fight') return;
-    switch (elapsed) {
+
+    if (elapsed > 0 && elapsed % 3 == 0) {
+      final punch = _getRandomPunch();
+      _playAudio('audio/$punch.mp3');
+
+      setState(() {
+        _currentPunch = _labelForPunch(punch);
+      });
+    }
+  }
+
+  String _labelForPunch(int p) {
+    switch (p) {
+      case 1:
+        return 'JAB (1)';
       case 2:
-        _playAssetOncePerCall('audio/bend_knees.mp3');
-        break;
+        return 'CROSS (2)';
+      case 3:
+        return 'LEAD HOOK (3)';
       case 4:
-        _playAssetOncePerCall('audio/tuck_chin.mp3');
-        break;
+        return 'REAR HOOK (4)';
+      case 5:
+        return 'LEFT UPPERCUT (5)';
       case 6:
-        _playAssetOncePerCall('audio/hands_up.mp3');
-        break;
-      case 8:
-        _playAssetOncePerCall('audio/stay_balanced.mp3');
-        break;
-      case 10:
-        _playAssetOncePerCall('audio/forward.mp3');
-        break;
-      case 15:
-        _playAssetOncePerCall('audio/backwards.mp3');
-        break;
-      case 20:
-        _playAssetOncePerCall('audio/forward.mp3');
-        break;
-      case 25:
-        _playAssetOncePerCall('audio/backwards.mp3');
-        break;
-      case 30:
-        _playAssetOncePerCall('audio/forward.mp3');
-        break;
-      case 35:
-        _playAssetOncePerCall('audio/right.mp3');
-        break;
-      case 40:
-        _playAssetOncePerCall('audio/left.mp3');
-        break;
-      case 45:
-        _playAssetOncePerCall('audio/right.mp3');
-        break;
-      case 50:
-        _playAssetOncePerCall('audio/left.mp3');
-        break;
-      case 55:
-        _playAssetOncePerCall('audio/right.mp3');
-        break;
+        return 'RIGHT UPPERCUT (6)';
       default:
-        break;
+        return '';
     }
   }
 
-  void _enterFight({required bool playBellStart}) {
-    if (playBellStart) {
-      _playAssetOncePerCall('audio/bell.mp3');
-    }
-    setState(() {
-      phase = 'fight';
-      timeLeft = _roundDuration;
-      running = false;
-    });
-  }
-
-  void _enterRest() {
-    setState(() {
-      phase = 'rest';
-      timeLeft = _restDuration;
-      running = false;
-    });
-  }
-  void _startFromTutorial() {
-    _enterFight(playBellStart: true);
-    setState(() {
-      _showTutorial = false;
-      currentRound = 1;
-    });
-    _start();
-  }
   void _start() {
     _timer?.cancel();
+    _phaseEndAt = DateTime.now().add(Duration(seconds: timeLeft));
     setState(() => running = true);
+    _updateForegroundNotification();
+
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      if (timeLeft <= 0) {
-        _onTimerEnd();
-        return;
-      }
-
-      final elapsed = _roundDuration - timeLeft;
-      _maybePlayInstructionAudio(elapsed);
-
-      final next = timeLeft - 1;
-      setState(() => timeLeft = next);
-      if (next <= 0) _onTimerEnd();
+      _syncWithClock();
     });
   }
+
+  void _syncWithClock() {
+    if (_phaseEndAt == null || !running) return;
+    final remaining = _phaseEndAt!.difference(DateTime.now()).inSeconds;
+    final clamped = remaining < 0 ? 0 : remaining;
+    final elapsed = (phase == 'fight' ? _roundDuration : _restDuration) - clamped;
+    _maybeCallPunch(elapsed);
+
+    if (clamped <= 0) {
+      setState(() => timeLeft = 0);
+      _onTimerEnd();
+      return;
+    }
+
+    if (timeLeft != clamped) {
+      setState(() => timeLeft = clamped);
+      _updateForegroundNotification();
+    }
+  }
+
   void _pause() {
     _timer?.cancel();
+    _phaseEndAt = null;
     setState(() => running = false);
+    WorkoutForegroundService.stop();
   }
+
   void _toggle() {
     if (phase == 'done') return;
     running ? _pause() : _start();
   }
+
   void _reset() {
     _timer?.cancel();
+    _audioPlayer.stop();
+    _phaseEndAt = null;
+
     setState(() {
       _showTutorial = true;
       _tutorialIndex = 0;
@@ -180,151 +242,139 @@ As you advance you can learn and perform more advanced stances and movements acc
       currentRound = 1;
       phase = 'fight';
       timeLeft = _roundDuration;
+      _currentPunch = 'Get Ready';
     });
-    _audioPlayer.stop();
+    WorkoutForegroundService.stop();
   }
-  void _skipRoundPart() {
-    _timer?.cancel();
-    if (phase == 'fight') {
-      _playAssetOncePerCall('audio/bell.mp3');
-      final finishing = currentRound >= _totalRounds;
-      setState(() {
-        running = false;
-        phase = finishing ? 'done' : 'rest';
-        timeLeft = finishing ? 0 : _restDuration;
-      });
-      if (!finishing) _start();
-      return;
-    }
 
-    if (phase == 'rest') {
-      _playAssetOncePerCall('audio/bell.mp3');
-      setState(() {
-        running = false;
-        currentRound++;
-        phase = 'fight';
-        timeLeft = _roundDuration;
-      });
-      _start();
-    }
-  }
-  void _onTimerEnd() {
+  void _skip() {
+    if (phase == 'done') return;
     _timer?.cancel();
+    _phaseEndAt = null;
+
     if (phase == 'fight') {
-      _playAssetOncePerCall('audio/bell.mp3');
+      _playAudio('audio/bell.mp3');
       if (currentRound >= _totalRounds) {
         setState(() {
           running = false;
           phase = 'done';
+          timeLeft = 0;
         });
       } else {
-        _enterRest();
+        setState(() {
+          running = false;
+          phase = 'rest';
+          timeLeft = _restDuration;
+        });
         _start();
       }
-    } else if (phase == 'rest') {
+    } else {
       currentRound++;
-      _enterFight(playBellStart: true);
+      _playAudio('audio/bell.mp3');
+      setState(() {
+        running = false;
+        phase = 'fight';
+        timeLeft = _roundDuration;
+        _currentPunch = 'Get Ready';
+      });
       _start();
     }
   }
+
+  void _onTimerEnd() {
+    _timer?.cancel();
+    _phaseEndAt = null;
+
+    if (phase == 'fight') {
+      _playAudio('audio/bell.mp3');
+
+      if (currentRound >= _totalRounds) {
+        setState(() {
+          phase = 'done';
+          running = false;
+        });
+        WorkoutForegroundService.stop();
+      } else {
+        setState(() {
+          phase = 'rest';
+          timeLeft = _restDuration;
+        });
+        _start();
+      }
+    } else {
+      currentRound++;
+      _playAudio('audio/bell.mp3');
+
+      setState(() {
+        phase = 'fight';
+        timeLeft = _roundDuration;
+      });
+
+      _start();
+    }
+  }
+
+  void _startFromTutorial() {
+    setState(() {
+      _showTutorial = false;
+      currentRound = 1;
+      phase = 'fight';
+      timeLeft = _roundDuration;
+    });
+
+    _playAudio('audio/bell.mp3');
+    _start();
+  }
+
   String get _timeDisplay {
     final m = timeLeft ~/ 60;
     final s = timeLeft % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
   }
+
   double get _progress {
     final total = phase == 'fight' ? _roundDuration : _restDuration;
-    if (phase == 'done' || total == 0) return 0;
-    return timeLeft / total;
+    return total == 0 ? 0 : timeLeft / total;
   }
-  String _cueForCurrentSecond() {
-    if (phase == 'rest') return 'Rest, breathe, and reset your stance';
-    if (phase == 'done') return 'Workout complete!';
-    final elapsed = _roundDuration - timeLeft;
-    if (elapsed < 10) {
-      if (elapsed < 2) return 'Hold your boxing stance';
-      if (elapsed < 4) return 'Bend your knees';
-      if (elapsed < 6) return 'Tuck your chin';
-      if (elapsed < 8) return 'Hands up, elbows in';
-      return 'Stay balanced on the balls of your feet';
-    }
-    if (elapsed < 35) {
-      final block = ((elapsed - 10) ~/ 5) % 2;
-      return block == 0 ? 'Linear Movement: Move forward' : 'Linear Movement: Move backward';
-    }
-    final block = ((elapsed - 35) ~/ 5) % 2;
-    return block == 0 ? 'Lateral Movement: Move right' : 'Lateral Movement: Move left';
-  }
+
   Widget _buildTutorialView() {
     final step = _steps[_tutorialIndex];
     final isLast = _tutorialIndex == _steps.length - 1;
+
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      color: Colors.white,
       child: SafeArea(
-        top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.black26,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              ),
-              const SizedBox(height: 14),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(step.title, style: AppTheme.headingStyle(30, color: Colors.black)),
-                      const SizedBox(height: 14),
-                      if (step.imagePath != null) ...[
-                        Container(
-                          width: double.infinity,
-                          height: 260,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF4F4F4),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0x22000000)),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: Image.asset(
-                              step.imagePath!,
-                              fit: BoxFit.contain,
-                              errorBuilder: (_, __, ___) => const Center(
-                                child: Text(
-                                  'Could not load assets/stance.jpg',
-                                  style: TextStyle(color: Colors.black54),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
-                      Text(step.body, style: AppTheme.bodyStyle(16, color: Colors.black87)),
+                      Text(step.title,
+                          style: AppTheme.headingStyle(28, color: Colors.black)),
+                      const SizedBox(height: 16),
+                      if (step.videoPath != null)
+                        _LoopingVideoPlayer(
+                          key: ValueKey(step.videoPath),
+                          videoPath: step.videoPath!,
+                        )
+                      else if (step.imagePath != null)
+                        Image.asset(step.imagePath!),
+                      const SizedBox(height: 16),
+                      Text(step.body,
+                          style: AppTheme.bodyStyle(16, color: Colors.black)),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
               Row(
                 children: [
                   TextButton(
-                    onPressed: _startFromTutorial,
-                    child: Text(
-                      'Skip',
-                      style: AppTheme.bodyStyle(15, weight: FontWeight.w700, color: Colors.black),
-                    ),
-                  ),
+                      onPressed: _startFromTutorial,
+                      child: const Text('Skip')),
                   const Spacer(),
                   ElevatedButton(
                     onPressed: () {
@@ -334,22 +384,17 @@ As you advance you can learn and perform more advanced stances and movements acc
                         setState(() => _tutorialIndex++);
                       }
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
                     child: Text(isLast ? 'Begin' : 'Next'),
-                  ),
+                  )
                 ],
-              ),
+              )
             ],
           ),
         ),
       ),
     );
   }
+
   Widget _buildWorkoutView() {
     return Container(
       decoration: const BoxDecoration(
@@ -380,7 +425,7 @@ As you advance you can learn and perform more advanced stances and movements acc
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('STANCE + MOVEMENTS', style: AppTheme.headingStyle(28)),
+                  Text('BASIC PUNCHES', style: AppTheme.headingStyle(28)),
                   Text(
                     phase == 'done'
                         ? 'WORKOUT COMPLETE!'
@@ -394,7 +439,10 @@ As you advance you can learn and perform more advanced stances and movements acc
                 child: Container(
                   width: 34,
                   height: 34,
-                  decoration: BoxDecoration(color: AppColors.surface, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.close, color: AppColors.text2, size: 16),
                 ),
               ),
@@ -406,11 +454,11 @@ As you advance you can learn and perform more advanced stances and movements acc
             children: [
               Text('Rounds:', style: AppTheme.bodyStyle(12, color: AppColors.text2)),
               const SizedBox(width: 8),
-              _LockedChip(label: '3'),
+              const _LockedChip(label: '3'),
               const SizedBox(width: 16),
               Text('Duration:', style: AppTheme.bodyStyle(12, color: AppColors.text2)),
               const SizedBox(width: 8),
-              _LockedChip(label: '1 min'),
+              const _LockedChip(label: '2 min'),
             ],
           ),
           const SizedBox(height: 20),
@@ -463,15 +511,19 @@ As you advance you can learn and perform more advanced stances and movements acc
             child: Column(
               children: [
                 Text(
-                  'CURRENT INSTRUCTION',
+                  'CURRENT PUNCH',
                   style: AppTheme.bodyStyle(10, weight: FontWeight.w700, color: AppColors.text3),
                 ),
                 const SizedBox(height: 6),
                 AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
+                  duration: const Duration(milliseconds: 300),
                   child: Text(
-                    _cueForCurrentSecond(),
-                    key: ValueKey('${phase}_$timeLeft'),
+                    phase == 'rest'
+                        ? 'REST'
+                        : phase == 'done'
+                            ? 'DONE'
+                            : _currentPunch,
+                    key: ValueKey('${phase}_${timeLeft}_$_currentPunch'),
                     style: AppTheme.bodyStyle(15, weight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
@@ -482,7 +534,9 @@ As you advance you can learn and perform more advanced stances and movements acc
           const SizedBox(height: 18),
           Row(
             children: [
-              Expanded(child: _CtrlBtn(label: '↺ Reset', onTap: _reset, ghost: true)),
+              Expanded(
+                child: _CtrlBtn(label: '↺ Reset', onTap: _reset, ghost: true),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 flex: 2,
@@ -493,7 +547,9 @@ As you advance you can learn and perform more advanced stances and movements acc
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(child: _CtrlBtn(label: 'Skip ▷', onTap: _skipRoundPart, ghost: true)),
+              Expanded(
+                child: _CtrlBtn(label: 'Skip ▷', onTap: _skip, ghost: true),
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -528,81 +584,33 @@ As you advance you can learn and perform more advanced stances and movements acc
       ),
     );
   }
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      child: _showTutorial ? _buildTutorialView() : _buildWorkoutView(),
-    );
+    return _showTutorial ? _buildTutorialView() : _buildWorkoutView();
   }
 }
+
 class _TutorialStep {
   final String title;
   final String body;
   final String? imagePath;
-  const _TutorialStep({required this.title, required this.body, this.imagePath});
+  final String? videoPath;
+
+  const _TutorialStep({
+    required this.title,
+    required this.body,
+    this.imagePath,
+    this.videoPath,
+  });
 }
-class _LockedChip extends StatelessWidget {
-  final String label;
-  const _LockedChip({required this.label});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.bg3,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(label, style: AppTheme.bodyStyle(13, color: AppColors.text)),
-    );
-  }
-}
-class _RingPainter extends CustomPainter {
-  final double progress;
-  final bool isRest;
-  final bool isDone;
-  const _RingPainter({required this.progress, required this.isRest, required this.isDone});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 10;
-    const strokeWidth = 10.0;
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()
-        ..color = AppColors.bg3
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth,
-    );
-    const startAngle = -pi / 2;
-    final sweepAngle = 2 * pi * progress;
-    final arcColor = isDone ? AppColors.green : (isRest ? AppColors.blue : AppColors.red);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      Paint()
-        ..color = arcColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-  @override
-  bool shouldRepaint(_RingPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.isRest != isRest ||
-        oldDelegate.isDone != isDone;
-  }
-}
+
 class _CtrlBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool ghost;
   const _CtrlBtn({required this.label, required this.onTap, required this.ghost});
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -626,5 +634,109 @@ class _CtrlBtn extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _LockedChip extends StatelessWidget {
+  final String label;
+  const _LockedChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.bg3,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(label, style: AppTheme.bodyStyle(13, color: AppColors.text)),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress;
+  final bool isRest;
+  final bool isDone;
+  const _RingPainter({required this.progress, required this.isRest, required this.isDone});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 10;
+    const strokeWidth = 10.0;
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = AppColors.bg3
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
+    );
+
+    const startAngle = -pi / 2;
+    final sweepAngle = 2 * pi * progress;
+    final arcColor = isDone ? AppColors.green : (isRest ? AppColors.blue : AppColors.red);
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      Paint()
+        ..color = arcColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.progress != progress || old.isRest != isRest || old.isDone != isDone;
+}
+
+class _LoopingVideoPlayer extends StatefulWidget {
+  final String videoPath;
+  const _LoopingVideoPlayer({
+  Key? key,
+  required this.videoPath,
+    }) : super(key: key);
+
+
+  @override
+  State<_LoopingVideoPlayer> createState() => _LoopingVideoPlayerState();
+}
+
+class _LoopingVideoPlayerState extends State<_LoopingVideoPlayer> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.asset(widget.videoPath)
+      ..initialize().then((_) {
+        setState(() {});
+        _controller.setLooping(true);
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _controller.value.isInitialized
+        ? AspectRatio(
+            aspectRatio: _controller.value.aspectRatio,
+            child: VideoPlayer(_controller),
+          )
+        : const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
   }
 }

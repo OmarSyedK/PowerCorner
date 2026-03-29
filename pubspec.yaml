@@ -37,6 +37,9 @@ dependencies:
   google_fonts: ^6.2.1
   shared_preferences: ^2.3.2
   audioplayers: ^6.6.0
+  video_player: ^2.8.2
+  flutter_local_notifications: ^17.2.3
+  flutter_foreground_task: ^8.17.0
 
 dev_dependencies:
   flutter_test:
@@ -63,8 +66,12 @@ flutter:
   assets:
     - assets/hero_banner.png
     - assets/gloves_icon.png
+    - assets/uppercut.jpg
     - assets/stance.jpg
     - assets/audio/
+    - assets/video/jab.mp4
+    - assets/video/cross.mp4
+    - assets/video/hook.mp4
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
