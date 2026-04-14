@@ -93,9 +93,9 @@ class _PowerCornerNavBar extends StatelessWidget {
               active: currentIndex == 1,
               onTap: () => onTap(1),
             ),
-            // FAB center button
+            // Center: Fight Camp setup
             GestureDetector(
-              onTap: () => onTap(1),
+              onTap: () => onTap(2),
               child: Container(
                 width: 54,
                 height: 54,
@@ -116,7 +116,7 @@ class _PowerCornerNavBar extends StatelessWidget {
                   ],
                 ),
                 child: const Center(
-                  child: Text('🥊', style: TextStyle(fontSize: 24)),
+                  child: Icon(Icons.flag, color: Colors.white, size: 26),
                 ),
               ),
             ),
